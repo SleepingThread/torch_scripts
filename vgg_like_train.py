@@ -104,7 +104,7 @@ if os.environ.get("TEST_MODE", "FALSE").upper() == "TRUE":
     train_limit=30
     test_limit=10
 
-trainset, testset = get_CIFAR10_ZCA("/media/sdc/data/cifar10", train_transform=train_transform,
+trainset, testset = get_CIFAR10_ZCA(os.path.join(os.environ["DATA"], "cifar10"), train_transform=train_transform,
                                     test_transform=test_transform, train_limit=train_limit, test_limit=test_limit)
 
 
@@ -114,14 +114,17 @@ class LRScheduler(object):
 
     def on_epoch_begin(self, logs):
         _lr = 2.0e-5 - 1.0e-5 * min(logs["epoch"] / 100., 1.0)
-        self.optimizer.param_groups[0]["lr"] = _lr
-        logs["lr"] = _lr
+        for _pg in self.optimizer.param_groups:
+            _pg["lr"] = _lr
 
 from torch.utils.data import DataLoader
 import torchmetrics
 
 loaders = {"train": DataLoader(trainset, batch_size=100), "test": DataLoader(testset, batch_size=100)}
-opt = torch.optim.Adam(model.parameters(), lr=2.0e-5)
+decay = [_p for _n, _p in model.named_parameters() if not _n.endswith(".bias") and _p.requires_grad]
+no_decay = [_p for _n, _p in model.named_parameters() if _n.endswith(".bias") and _p.requires_grad]
+opt = torch.optim.Adam([{'params': no_decay, 'weight_decay': 0.},
+                        {'params': decay, 'weight_decay': 1.0e-5}], lr=2.0e-5)
 ce_loss = torch.nn.CrossEntropyLoss()
 ce_loss.__name__ = "cross_entropy"
 
