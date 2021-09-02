@@ -116,6 +116,7 @@ class LRScheduler(object):
         _lr = 2.0e-5 - 1.0e-5 * min(logs["epoch"] / 100., 1.0)
         for _pg in self.optimizer.param_groups:
             _pg["lr"] = _lr
+        logs["lr"] = _lr
 
 from torch.utils.data import DataLoader
 import torchmetrics
