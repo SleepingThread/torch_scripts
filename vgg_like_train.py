@@ -1,16 +1,18 @@
 import os
 import sys
+import random
+import pickle
+
 import numpy as np
+
 import torch
+from torch.utils.data import DataLoader
+import torchmetrics
+import torchvision
+from torchvision import transforms
 
 from torch_prune.models.var_dropout_vgglike import VGGLike
 from torch_prune.trainers import train_loop
-
-device = "cuda:0" if torch.cuda.is_available() else "cpu"
-model = VGGLike(10, 1, use_dropout=True).to(device)
-
-import torchvision
-from torchvision import transforms
 
 
 class ZCA(object):
@@ -88,6 +90,29 @@ def get_CIFAR10_ZCA(root, train_transform=None, test_transform=None, train_limit
     return trainset, testset
 
 
+class LRScheduler(object):
+    def __init__(self, optimizer):
+        self.optimizer = optimizer
+
+    def on_epoch_begin(self, logs):
+        _lr = 2.0e-5 - 1.0e-5 * min(logs["epoch"] / 100., 1.0)
+        for _pg in self.optimizer.param_groups:
+            _pg["lr"] = _lr
+        logs["lr"] = _lr
+
+
+seed_value = 0
+
+random.seed(seed_value)
+torch.manual_seed(seed_value)
+np.random.seed(seed_value)
+
+torch.backends.cudnn.benchmark = False
+torch.use_deterministic_algorithms(True)
+
+device = "cuda:0" if torch.cuda.is_available() else "cpu"
+model = VGGLike(10, 1, use_dropout=True).to(device)
+
 train_transform = transforms.Compose([
     transforms.ToTensor()
 ])
@@ -108,20 +133,18 @@ trainset, testset = get_CIFAR10_ZCA(os.path.join(os.environ["DATA"], "cifar10"),
                                     test_transform=test_transform, train_limit=train_limit, test_limit=test_limit)
 
 
-class LRScheduler(object):
-    def __init__(self, optimizer):
-        self.optimizer = optimizer
+def seed_worker(worker_id):
+    worker_seed = torch.initial_seed() % 2**32
+    np.random.seed(worker_seed)
+    random.seed(worker_seed)
 
-    def on_epoch_begin(self, logs):
-        _lr = 2.0e-5 - 1.0e-5 * min(logs["epoch"] / 100., 1.0)
-        for _pg in self.optimizer.param_groups:
-            _pg["lr"] = _lr
-        logs["lr"] = _lr
 
-from torch.utils.data import DataLoader
-import torchmetrics
-
-loaders = {"train": DataLoader(trainset, batch_size=100), "test": DataLoader(testset, batch_size=100)}
+train_g = torch.Generator()
+train_g.manual_seed(seed_value)
+test_g = torch.Generator()
+test_g.manual_seed(seed_value)
+loaders = {"train": DataLoader(trainset, batch_size=100, generator=train_g, worker_init_fn=seed_worker),
+           "test": DataLoader(testset, batch_size=100, generator=test_g, worker_init_fn=seed_worker)}
 decay = [_p for _n, _p in model.named_parameters() if not _n.endswith(".bias") and _p.requires_grad]
 no_decay = [_p for _n, _p in model.named_parameters() if _n.endswith(".bias") and _p.requires_grad]
 opt = torch.optim.Adam([{'params': no_decay, 'weight_decay': 0.},
@@ -136,7 +159,7 @@ top_1.__name__ = "top_1"
 logs = train_loop(model, ce_loss, loaders, opt, epochs, device=device, metrics=[ce_loss, top_1], logs_dir="./",
                   callbacks=[LRScheduler(opt)])
 
-import pickle
-
 with open("logs.pkl", "wb") as logs_file:
     pickle.dump(logs, logs_file)
+
+torch.save(model, "model.torch")
