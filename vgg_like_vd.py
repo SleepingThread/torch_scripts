@@ -7,7 +7,6 @@ import functools
 import numpy as np
 
 import torch
-from torch import nn
 import torch.nn.functional as F
 from torch.nn.parameter import Parameter
 from torch.utils.data import DataLoader
@@ -33,8 +32,8 @@ class VariationalDropout(object):
         ==========
         modules: list of (module, <dict with config>)
 
-        Usage
-        =====
+        Example
+        =======
         vd = VariationalDropout([(model.linear, None)])  # all specified modules support vd
         """
         self.modules = modules
@@ -293,7 +292,9 @@ torch.use_deterministic_algorithms(True)
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 model = VGGLike(10, 1, use_dropout=False).to(device)
 
-modules = functools.reduce(lambda _a, _x: _a+_x, [[_cbr.conv for _cbr in _blk.conv_bn_rectify] for _blk in model.blocks]) + [model.final[0], model.final[4]]
+modules = functools.reduce(lambda _a, _x: _a+_x,
+                           [[_cbr.conv for _cbr in _blk.conv_bn_rectify] for _blk in model.blocks]) + \
+          [model.final[0], model.final[3]]
 modules = list(zip(modules, [dict() for _i in range(len(modules))]))
 vd = VariationalDropout(modules)
 
@@ -343,20 +344,9 @@ def loss(output, target):
 top_1 = torchmetrics.Accuracy(top_k=1).to(device)
 top_1.__name__ = "top_1"
 
-
-def get_logalphas():
-    logalphas = []
-    weights = {_n: _p for _n, _p in model.named_parameters()}
-    for _n, _p in model.named_parameters():
-        if _n.endswith("logsigma2"):
-            _w_orig = weights[_n[:-len("logsigma2")] + "orig"]
-            _ls = _p
-            _la = _ls - torch.log(torch.square(_w_orig) + 1.0e-8)
-            logalphas.append(_la)
-    return logalphas
-
-
-logs_writer = TBLogsWriter("./", writers_keys=list(loaders.keys()), histograms={"logalphas": get_logalphas})
+logs_writer = TBLogsWriter("./", writers_keys=list(loaders.keys()),
+                           histograms={"logalphas": [_p for _n, _p in model.named_parameters()
+                                                     if _n.endswith("logalpha")]})
 logs_writer.add_info({"model": "Molchanov's VGGLike(10, 1, use_dropout=False)",
                       "comment": "Reproduce simple VD(with logalpha)"})
 

@@ -299,8 +299,8 @@ device = "cuda:0" if torch.cuda.is_available() else "cpu"
 model = VGGLike(10, 1, use_dropout=False).to(device)
 
 modules = functools.reduce(lambda _a, _x: _a + _x,
-                           [[_cbr.conv for _cbr in _blk.conv_bn_rectify] for _blk in model.blocks]) + [model.final[0],
-                                                                                                       model.final[4]]
+                           [[_cbr.conv for _cbr in _blk.conv_bn_rectify] for _blk in model.blocks]) + \
+          [model.final[0], model.final[3]]
 modules = list(zip(modules, [dict() for _i in range(len(modules))]))
 vd = VariationalDropoutLogsigma2(modules)
 
