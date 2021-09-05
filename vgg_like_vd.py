@@ -67,7 +67,7 @@ class VariationalDropout(object):
             _m.register_parameter(_w_name + "_orig", _w)
             _la = Parameter(torch.full(_w.shape, _cfg.get("init_logalpha", self.initial_logalpha)))
             _m.register_parameter(_w_name + "_logalpha", _la)
-            _m.register_buffer(_w_name + "_mask", torch.zeros(*_w.shape, dtype=torch.bool))
+            _m.register_buffer(_w_name + "_mask", torch.ones(*_w.shape, dtype=torch.bool))
 
             self._forward_pre_hooks.append(_m.register_forward_pre_hook(self.prehook))
             self._forward_hooks.append(_m.register_forward_hook(self.hook))
@@ -277,6 +277,8 @@ class VDLambdaScheduler(object):
         vd_lambda = self.max_value * min(max(0, epoch - 5)/15., 1.0)
         self.var_dropout.set_vd_lambda(vd_lambda)
         logs["vd_lambda"] = vd_lambda
+
+    def on_epoch_end(self, logs):
         logs["nonzero_weights"] = self.var_dropout.get_nonzero_weights()
 
 

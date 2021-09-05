@@ -283,6 +283,8 @@ class VDLambdaScheduler(object):
         vd_lambda = self.max_value * min(max(0, epoch - 5) / 15., 1.0)
         self.var_dropout.set_vd_lambda(vd_lambda)
         logs["vd_lambda"] = vd_lambda
+
+    def on_epoch_end(self, logs):
         logs["nonzero_weights"] = self.var_dropout.get_nonzero_weights()
 
 
