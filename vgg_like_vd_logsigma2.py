@@ -7,7 +7,6 @@ import functools
 import numpy as np
 
 import torch
-from torch import nn
 import torch.nn.functional as F
 from torch.nn.parameter import Parameter
 from torch.utils.data import DataLoader
@@ -19,8 +18,8 @@ from torch_prune.models.var_dropout_vgglike import VGGLike
 from torch_prune.trainers import train_loop, TBLogsWriter
 
 
-class VariationalDropout(object):
-    def __init__(self, modules, vd_lambda=None, normal_stddev=1., initial_logalpha=-8., logalpha_threshold=3.,
+class VariationalDropoutLogsigma2(object):
+    def __init__(self, modules, vd_lambda=None, normal_stddev=1., initial_logsigma2=-10., logalpha_threshold=3.,
                  logalpha_clip_values=(-8., 8.), deterministic=False):
         """
         We can treat VariationalDropout as hooks container
@@ -33,13 +32,13 @@ class VariationalDropout(object):
         ==========
         modules: list of (module, <dict with config>)
 
-        Usage
-        =====
+        Example
+        =======
         vd = VariationalDropout([(model.linear, None)])  # all specified modules support vd
         """
         self.modules = modules
         self.normal_stddev = normal_stddev
-        self.initial_logalpha = initial_logalpha
+        self.initial_logsigma2 = initial_logsigma2
         self.logalpha_threshold = logalpha_threshold
         self.logalpha_clip_values = logalpha_clip_values
 
@@ -66,9 +65,9 @@ class VariationalDropout(object):
             _w = getattr(_m, _w_name)
             delattr(_m, _w_name)
             _m.register_parameter(_w_name + "_orig", _w)
-            _la = Parameter(torch.full(_w.shape, _cfg.get("init_logalpha", self.initial_logalpha)))
-            _m.register_parameter(_w_name + "_logalpha", _la)
-            _m.register_buffer(_w_name + "_mask", torch.zeros(*_w.shape, dtype=torch.bool))
+            _ls = Parameter(torch.full(_w.shape, _cfg.get("init_logsigma2", self.initial_logsigma2)))
+            _m.register_parameter(_w_name + "_logsigma2", _ls)
+            _m.register_buffer(_w_name + "_mask", torch.ones(*_w.shape, dtype=torch.bool))
 
             self._forward_pre_hooks.append(_m.register_forward_pre_hook(self.prehook))
             self._forward_hooks.append(_m.register_forward_hook(self.hook))
@@ -82,8 +81,10 @@ class VariationalDropout(object):
 
         # calculate masked weight
         _mask = getattr(module, _w_name + "_mask")
-        _la = getattr(module, _w_name + "_logalpha")
+        _w_orig = getattr(module, _w_name + "_orig")
+        _ls = getattr(module, _w_name + "_logsigma2")
         with torch.no_grad():
+            _la = _ls - torch.log(torch.square(_w_orig) + 1.0e-8)
             _mask[:] = _la < self.logalpha_threshold
 
         _weight = getattr(module, _w_name + "_orig") * _mask
@@ -98,7 +99,8 @@ class VariationalDropout(object):
     def _hook_linear(self, module, inputs, outputs):
         _inp = inputs[0]
         _w = module.weight
-        _la = torch.clamp(module.weight_logalpha, min=self.logalpha_clip_values[0], max=self.logalpha_clip_values[1])
+        _la = module.weight_logsigma2 - torch.log(torch.square(module.weight_orig) + 1.0e-8)
+        _la = torch.clamp(_la, min=self.logalpha_clip_values[0], max=self.logalpha_clip_values[1])
 
         _vd_add = torch.sqrt((_inp * _inp) @ (torch.exp(_la) * _w * _w).t() + 1.0e-14)
         _rand = torch.normal(0., self.normal_stddev, _vd_add.shape, device=_vd_add.device)
@@ -112,7 +114,8 @@ class VariationalDropout(object):
     def _hook_conv2d(self, module, inputs, outputs):
         _inp = inputs[0]
         _w = module.weight
-        _la = torch.clamp(module.weight_logalpha, min=self.logalpha_clip_values[0], max=self.logalpha_clip_values[1])
+        _la = module.weight_logsigma2 - torch.log(torch.square(module.weight_orig) + 1.0e-8)
+        _la = torch.clamp(_la, min=self.logalpha_clip_values[0], max=self.logalpha_clip_values[1])
 
         # convolve _inp*_inp with torch.exp(_la)*_w*_w, replace bias with None
         _inp = _inp * _inp
@@ -137,7 +140,9 @@ class VariationalDropout(object):
 
         _res = 0.
         for _m, _cfg in self._modules_dict.items():
-            _la = getattr(_m, _cfg.get("weight", "weight") + "_logalpha")
+            _w_orig = getattr(_m, _cfg.get("weight", "weight") + "_orig")
+            _ls = getattr(_m, _cfg.get("weight", "weight") + "_logsigma2")
+            _la = _ls - torch.log(torch.square(_w_orig) + 1.0e-8)
             _la = torch.clamp(_la, min=self.logalpha_clip_values[0], max=self.logalpha_clip_values[1])
             mdkl = k1 * torch.sigmoid(k2 + k3 * _la) - 0.5 * torch.log1p(torch.exp(-_la)) + C
             _res += -torch.sum(mdkl)
@@ -275,7 +280,7 @@ class VDLambdaScheduler(object):
 
     def on_epoch_begin(self, logs):
         epoch = logs["epoch"]
-        vd_lambda = self.max_value * min(max(0, epoch - 5)/15., 1.0)
+        vd_lambda = self.max_value * min(max(0, epoch - 5) / 15., 1.0)
         self.var_dropout.set_vd_lambda(vd_lambda)
         logs["vd_lambda"] = vd_lambda
         logs["nonzero_weights"] = self.var_dropout.get_nonzero_weights()
@@ -293,9 +298,11 @@ torch.use_deterministic_algorithms(True)
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 model = VGGLike(10, 1, use_dropout=True).to(device)
 
-modules = functools.reduce(lambda _a, _x: _a+_x, [[_cbr.conv for _cbr in _blk.conv_bn_rectify] for _blk in model.blocks]) + [model.final[0], model.final[4]]
+modules = functools.reduce(lambda _a, _x: _a + _x,
+                           [[_cbr.conv for _cbr in _blk.conv_bn_rectify] for _blk in model.blocks]) + [model.final[0],
+                                                                                                       model.final[4]]
 modules = list(zip(modules, [dict() for _i in range(len(modules))]))
-vd = VariationalDropout(modules)
+vd = VariationalDropoutLogsigma2(modules)
 
 train_transform = transforms.Compose([
     transforms.ToTensor()
@@ -310,15 +317,15 @@ train_limit = test_limit = None
 
 if os.environ.get("TEST_MODE", "FALSE").upper() == "TRUE":
     epochs = 200
-    train_limit=30
-    test_limit=10
+    train_limit = 30
+    test_limit = 10
 
 trainset, testset = get_CIFAR10_ZCA(os.path.join(os.environ["DATA"], "cifar10"), train_transform=train_transform,
                                     test_transform=test_transform, train_limit=train_limit, test_limit=test_limit)
 
 
 def seed_worker(worker_id):
-    worker_seed = torch.initial_seed() % 2**32
+    worker_seed = torch.initial_seed() % 2 ** 32
     np.random.seed(worker_seed)
     random.seed(worker_seed)
 
@@ -337,8 +344,10 @@ opt = torch.optim.Adam([{'params': no_decay, 'weight_decay': 0.},
 ce_loss = torch.nn.CrossEntropyLoss()
 ce_loss.__name__ = "cross_entropy"
 
+
 def loss(output, target):
     return ce_loss(output, target) + vd.get_dkl()
+
 
 top_1 = torchmetrics.Accuracy(top_k=1).to(device)
 top_1.__name__ = "top_1"
@@ -359,7 +368,7 @@ def get_logalphas():
 logs_writer = TBLogsWriter("./", writers_keys=list(loaders.keys()), histograms={"logalphas": get_logalphas})
 
 logs = train_loop(model, loss, loaders, opt, epochs, device=device, metrics=[ce_loss, top_1],
-                  callbacks=[LRScheduler(opt), VDLambdaScheduler(vd, 1./50000.), logs_writer])
+                  callbacks=[LRScheduler(opt), VDLambdaScheduler(vd, 1. / 50000.), logs_writer])
 
 with open("logs.pkl", "wb") as logs_file:
     pickle.dump(logs, logs_file)

@@ -12,7 +12,7 @@ import torchvision
 from torchvision import transforms
 
 from torch_prune.models.var_dropout_vgglike import VGGLike
-from torch_prune.trainers import train_loop
+from torch_prune.trainers import train_loop, TBLogsWriter
 
 
 class ZCA(object):
@@ -155,9 +155,10 @@ ce_loss.__name__ = "cross_entropy"
 top_1 = torchmetrics.Accuracy(top_k=1).to(device)
 top_1.__name__ = "top_1"
 
-# нет lr scheduler, callbacks
-logs = train_loop(model, ce_loss, loaders, opt, epochs, device=device, metrics=[ce_loss, top_1], logs_dir="./",
-                  callbacks=[LRScheduler(opt)])
+logs_writer = TBLogsWriter("./", writers_keys=list(loaders.keys()))
+
+logs = train_loop(model, ce_loss, loaders, opt, epochs, device=device, metrics=[ce_loss, top_1],
+                  callbacks=[LRScheduler(opt), logs_writer])
 
 with open("logs.pkl", "wb") as logs_file:
     pickle.dump(logs, logs_file)
