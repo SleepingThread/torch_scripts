@@ -156,6 +156,8 @@ top_1 = torchmetrics.Accuracy(top_k=1).to(device)
 top_1.__name__ = "top_1"
 
 logs_writer = TBLogsWriter("./", writers_keys=list(loaders.keys()))
+logs_writer.add_info({"model": "Molchanov's VGGLike(10, 1, use_dropout=True)",
+                      "comment": "Reproduce training"})
 
 logs = train_loop(model, ce_loss, loaders, opt, epochs, device=device, metrics=[ce_loss, top_1],
                   callbacks=[LRScheduler(opt), logs_writer])

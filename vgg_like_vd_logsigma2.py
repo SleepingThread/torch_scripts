@@ -296,7 +296,7 @@ torch.backends.cudnn.benchmark = False
 torch.use_deterministic_algorithms(True)
 
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
-model = VGGLike(10, 1, use_dropout=True).to(device)
+model = VGGLike(10, 1, use_dropout=False).to(device)
 
 modules = functools.reduce(lambda _a, _x: _a + _x,
                            [[_cbr.conv for _cbr in _blk.conv_bn_rectify] for _blk in model.blocks]) + [model.final[0],
@@ -366,6 +366,8 @@ def get_logalphas():
 
 
 logs_writer = TBLogsWriter("./", writers_keys=list(loaders.keys()), histograms={"logalphas": get_logalphas})
+logs_writer.add_info({"model": "Molchanov's VGGLike(10, 1, use_dropout=False)",
+                      "comment": "Reproduce Molchanov's VD(with logsigma2)"})
 
 logs = train_loop(model, loss, loaders, opt, epochs, device=device, metrics=[ce_loss, top_1],
                   callbacks=[LRScheduler(opt), VDLambdaScheduler(vd, 1. / 50000.), logs_writer])
