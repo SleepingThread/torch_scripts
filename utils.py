@@ -8,13 +8,17 @@ from torch import nn
 import torch.backends.cudnn
 
 
-def initialize_torch(seed_value, deterministic=True):
+def initialize_torch(seed_value, deterministic=True,
+                     visible_gpus=None, cublas_workspace_config=":4096:8"):
+    if visible_gpus is not None:
+        os.environ["CUDA_VISIBLE_DEVICES"] = visible_gpus
+
     random.seed(seed_value)
     torch.manual_seed(seed_value)
     np.random.seed(seed_value)
 
     if deterministic:
-        # os.environ["CUBLAS"]
+        os.environ["CUBLAS_WORKSPACE_CONFIG"] = cublas_workspace_config
         torch.backends.cudnn.benchmark = False
         torch.use_deterministic_algorithms(True)
 
