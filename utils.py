@@ -79,11 +79,12 @@ class Module(nn.Module):
                     os.makedirs(_logs_dir)
                     break
                 except FileExistsError:
-                    if unique_id >= 1000:
-                        raise ValueError("Can't find unique_id")
+                    pass
+            if unique_id >= 1000:
+                raise ValueError("Can't find unique_id")
 
-                    _logs_dir = "%s_%03d" % (root, unique_id)
-                    unique_id += 1
+            _logs_dir = "%s_%03d" % (root, unique_id)
+            unique_id += 1
 
         self.logs_dir = _logs_dir
 
