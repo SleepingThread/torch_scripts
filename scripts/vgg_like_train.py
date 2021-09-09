@@ -87,7 +87,8 @@ def loss_l2(output, target):
 model.info = {
     "model": "VGG16",
     "data": "cifar10",
-    "comment": "train, Adam + l2(2e-5), linear lr scheduler"
+    "comment": "train, Adam + l2(2e-5), linear lr scheduler",
+    "status": "running"
 }
 
 logs_writer = TBLogsWriter(model.logs_dir, writers_keys=list(loaders.keys()))
@@ -108,5 +109,7 @@ class LRScheduler(object):
 logs = train_loop(model, loss_l2, loaders, opt, epochs, device=device, metrics=[loss_l2, ce_loss, top_1],
                   callbacks=[LRScheduler(opt), logs_writer])
 
+model.info["status"] = "finished"
 model.save("logs.pkl", logs)
 model.save()
+storage.save(model)

@@ -122,14 +122,16 @@ class Storage(object):
             comment=info.get("comment", ""),
             quality=info.get("quality", np.nan),
             nonzero_weights=info.get("nonzero_weights", np.nan),
-            total_weights=info.get("total_weights", np.nan)
+            total_weights=info.get("total_weights", np.nan),
+            status=info.get("status", "<unknown>")
         )
         info.update(res)
 
         return {_k: info[_k] for _k in keys}
 
     def _get_table(self, keys, add_keys):
-        default_keys = ["id", "data", "model", "comment", "quality", "nonzero_weights", "total_weights"]
+        default_keys = ["id", "data", "model", "comment", "quality", "nonzero_weights", "total_weights",
+                        "status"]
         keys = default_keys if keys is None else keys
         add_keys = [] if add_keys is None else add_keys
         keys = keys + add_keys
