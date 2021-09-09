@@ -6,6 +6,7 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 import torchvision
+from torchvision import transforms
 import torchmetrics
 # from torch_scripts.data.cifar10 import get_cifar10_zca
 from torch_scripts.models.vgg import VGG
@@ -35,10 +36,22 @@ train_limit = test_limit = None
 #trainset, testset = get_CIFAR10_ZCA(os.path.join(os.environ["DATA"], "cifar10"), train_transform=train_transform,
 #                                    test_transform=test_transform, train_limit=train_limit, test_limit=test_limit)
 
+train_transform = transforms.Compose([
+    # transforms.RandomCrop(32, padding=4),
+    # transforms.RandomHorizontalFlip(),
+    transforms.ToTensor(),
+    transforms.Normalize((0.5, 0.5, 0.5), (0.25, 0.25, 0.25)),
+])
+
+test_transform = transforms.Compose([
+    transforms.ToTensor(),
+    transforms.Normalize((0.5, 0.5, 0.5), (0.25, 0.25, 0.25)),
+])
+
 trainset = torchvision.datasets.CIFAR10(root=os.path.join(os.environ["DATA"], "cifar10"),
-                                        train=True, transform=None, download=True)
+                                        train=True, transform=train_transform, download=True)
 testset = torchvision.datasets.CIFAR10(root=os.path.join(os.environ["DATA"], "cifar10"),
-                                       train=False, transform=None)
+                                       train=False, transform=test_transform)
 
 
 def seed_worker(worker_id):
@@ -71,9 +84,14 @@ def loss_l2(output, target):
     return ce_loss(output, target) + model.l2_weight*reg
 
 
+model.info = {
+    "model": "VGG16",
+    "data": "cifar10",
+    "comment": "train, Adam + l2(2e-5), linear lr scheduler"
+}
+
 logs_writer = TBLogsWriter(model.logs_dir, writers_keys=list(loaders.keys()))
-logs_writer.add_info({"model": "Molchanov's VGGLike(10, 1, use_dropout=True)",
-                      "comment": "Reproduce training"})
+logs_writer.add_info(model.info)
 
 
 class LRScheduler(object):
