@@ -1,4 +1,5 @@
 import sys
+import typing
 
 import torch
 
@@ -72,7 +73,7 @@ class MetricsAggregator(object):
 
 
 def train_loop(model, loss_function, loaders, optimizer, epochs, start_epoch=0, device=None,
-               metrics=None, logs=None, callbacks=None):
+               metrics=None, logs=None, callbacks: typing.Optional[typing.List[typing.Any]] = None):
     """
     Parameters
     ==========
