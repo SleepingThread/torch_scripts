@@ -1,4 +1,5 @@
 import os
+import typing
 import functools
 
 import numpy as np
@@ -80,7 +81,7 @@ class TBLogsWriter(object):
 
 
 class CallbacksList(object):
-    def __init__(self, callbacks_list):
+    def __init__(self, callbacks_list: typing.Optional[typing.List[typing.Any]]):
         self.callbacks_list = [] if callbacks_list is None else callbacks_list
 
     def _callback_method_call(self, cm_name, *args, **kwargs):
