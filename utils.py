@@ -31,11 +31,19 @@ class Modifiers(object):
 
     def __setattr__(self, name, value):
         if name in self.elems:
-            raise KeyError()
+            raise KeyError("%s key is already in use" % name)
         self.elems[name] = value
 
+    def __delattr__(self, name):
+        if name in self.elems:
+            del self.elems[name]
+        else:
+            super(Modifiers, self).__delattr__(name)
+
     def __getattr__(self, name):
-        return self.elems[name]
+        if name != "elems" and name in self.elems:
+            return self.elems[name]
+        raise AttributeError
 
     def __repr__(self):
         return str(self.elems)
@@ -47,6 +55,8 @@ class Module(nn.Module):
 
         self.modifiers = Modifiers()
         self.logs_dir = None
+        self.storage_id = None
+        self.info = dict()
 
     def initialize_logs_dir(self, root, prefix, suffix=None):
         """
@@ -94,8 +104,8 @@ class Module(nn.Module):
                     pickle.dump(obj, f)
             else:
                 ValueError("Unknown name extension: should be .torch or .pkl")
-
-        torch.save(self, os.path.join(self.logs_dir, "model.torch"))
+        else:
+            torch.save(self, os.path.join(self.logs_dir, "model.torch"))
 
     @staticmethod
     def load_model(logs_dir):
