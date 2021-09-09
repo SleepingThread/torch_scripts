@@ -87,8 +87,8 @@ class Storage(object):
     def _create_block_nl(self, blk_id):
         os.makedirs(os.path.join(self.path, "%d" % blk_id), exist_ok=True)
 
-    def save(self, model, update=False):
-        if update or model.storage_id is None:
+    def save(self, model, update=True):
+        if not update or model.storage_id is None:
             with self._storage_lock():
                 _id = self._get_id_nl()
         else:
