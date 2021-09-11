@@ -1,12 +1,12 @@
-import numpy as np
-
 import torch
 import torch.nn.functional as F
 from torch.nn.parameter import Parameter
 from torch.utils.data import DataLoader
 
+from ..utils import BaseMasker
 
-class BaseVariationalDropout(object):
+
+class BaseVariationalDropout(BaseMasker):
     """
     We can treat VariationalDropout as hooks container
 
@@ -19,16 +19,11 @@ class BaseVariationalDropout(object):
     vd = VariationalDropout([(model.linear, None)])  # all specified modules support vd
     """
 
-    def __init__(self, modules, vd_lambda=None, deterministic=False):
-        self.modules = modules
-
+    def __init__(self, model, modules, vd_lambda=None, deterministic=False):
+        super(BaseVariationalDropout, self).__init__(model, modules)
         self.deterministic = deterministic
 
         self.vd_lambda = vd_lambda
-
-        self._modules_dict = None
-        self._forward_hooks = list()
-        self._forward_pre_hooks = list()
 
     def set_vd_lambda(self, vd_lambda):
         self.vd_lambda = vd_lambda
@@ -36,17 +31,6 @@ class BaseVariationalDropout(object):
     def remove(self):
         for _hook in self._forward_pre_hooks + self._forward_hooks:
             _hook.remove()
-
-    def get_nonzero_weights(self):
-        _nonzero = 0.
-        _all = 0.
-        for _m, _cfg in self._modules_dict.items():
-            _w_name = _cfg.get("weight", "weight")
-            _mask = getattr(_m, _w_name + "_mask")
-            _nonzero = torch.sum(_mask).item()
-            _all = np.prod(_mask.shape)
-
-        return _nonzero / _all
 
     def get_supported_layers(self):
         _prehook = set()
@@ -72,9 +56,9 @@ class BaseVariationalDropout(object):
 
 
 class VariationalDropout(BaseVariationalDropout):
-    def __init__(self, modules, vd_lambda=None, normal_stddev=1., initial_logalpha=-8., logalpha_threshold=3.,
+    def __init__(self, model, modules, vd_lambda=None, normal_stddev=1., initial_logalpha=-8., logalpha_threshold=3.,
                  logalpha_clip_values=(-8., 8.), deterministic=False):
-        super(VariationalDropout, self).__init__(modules, vd_lambda=vd_lambda, deterministic=deterministic)
+        super(VariationalDropout, self).__init__(model, modules, vd_lambda=vd_lambda, deterministic=deterministic)
 
         self.normal_stddev = normal_stddev
         self.initial_logalpha = initial_logalpha
@@ -87,24 +71,24 @@ class VariationalDropout(BaseVariationalDropout):
         """
         Add prehook and hook for all modules
         """
-        self._modules_dict = dict()
-        for _m, _cfg in self.modules:
-            _cfg = _cfg if _cfg is not None else dict()
-            self._modules_dict[_m] = _cfg
+        for _m, _cfg in self.modules_dict.items():
             _w_name = _cfg.get("weight", "weight")
 
             _w = getattr(_m, _w_name)
             delattr(_m, _w_name)
-            _m.register_parameter(_w_name + "_orig", _w)
-            _la = Parameter(torch.full(_w.shape, _cfg.get("init_logalpha", self.initial_logalpha)))
-            _m.register_parameter(_w_name + "_logalpha", _la)
-            _m.register_buffer(_w_name + "_mask", torch.ones(*_w.shape, dtype=torch.bool))
+            if not hasattr(_m, _w_name + "_orig"):
+                _m.register_parameter(_w_name + "_orig", _w)
+            if not hasattr(_m, _w_name + "_logalpha"):
+                _la = Parameter(torch.full(_w.shape, _cfg.get("init_logalpha", self.initial_logalpha)))
+                _m.register_parameter(_w_name + "_logalpha", _la)
+            if not hasattr(_m, _w_name + "_mask"):
+                _m.register_buffer(_w_name + "_mask", torch.ones(*_w.shape, dtype=torch.bool))
 
             self._forward_pre_hooks.append(_m.register_forward_pre_hook(self.prehook))
             self._forward_hooks.append(_m.register_forward_hook(self.hook))
 
     def _base_prehook(self, module, _inputs):
-        _cfg = self._modules_dict[module]
+        _cfg = self.modules_dict[module]
         _w_name = _cfg.get("weight", "weight")
 
         # calculate masked weight
@@ -163,7 +147,7 @@ class VariationalDropout(BaseVariationalDropout):
         c = -k1
 
         _res = 0.
-        for _m, _cfg in self._modules_dict.items():
+        for _m, _cfg in self.modules_dict.items():
             _la = getattr(_m, _cfg.get("weight", "weight") + "_logalpha")
             _la = torch.clamp(_la, min=self.logalpha_clip_values[0], max=self.logalpha_clip_values[1])
             mdkl = k1 * torch.sigmoid(k2 + k3 * _la) - 0.5 * torch.log1p(torch.exp(-_la)) + c
@@ -173,9 +157,9 @@ class VariationalDropout(BaseVariationalDropout):
 
 
 class VariationalDropoutLogsigma2(BaseVariationalDropout):
-    def __init__(self, modules, vd_lambda=None, normal_stddev=1., initial_logsigma2=-10., logalpha_threshold=3.,
+    def __init__(self, model, modules, vd_lambda=None, normal_stddev=1., initial_logsigma2=-10., logalpha_threshold=3.,
                  logalpha_clip_values=(-8., 8.), deterministic=False):
-        super(VariationalDropoutLogsigma2, self).__init__(modules, vd_lambda=vd_lambda, deterministic=deterministic)
+        super(VariationalDropoutLogsigma2, self).__init__(model, modules, vd_lambda=vd_lambda, deterministic=deterministic)
 
         self.normal_stddev = normal_stddev
         self.initial_logsigma2 = initial_logsigma2
@@ -188,24 +172,24 @@ class VariationalDropoutLogsigma2(BaseVariationalDropout):
         """
         Add prehook and hook for all modules
         """
-        self._modules_dict = dict()
-        for _m, _cfg in self.modules:
-            _cfg = _cfg if _cfg is not None else dict()
-            self._modules_dict[_m] = _cfg
+        for _m, _cfg in self.modules_dict.items():
             _w_name = _cfg.get("weight", "weight")
 
             _w = getattr(_m, _w_name)
             delattr(_m, _w_name)
-            _m.register_parameter(_w_name + "_orig", _w)
-            _ls = Parameter(torch.full(_w.shape, _cfg.get("init_logsigma2", self.initial_logsigma2)))
-            _m.register_parameter(_w_name + "_logsigma2", _ls)
-            _m.register_buffer(_w_name + "_mask", torch.ones(*_w.shape, dtype=torch.bool))
+            if not hasattr(_m, _w_name + "_orig"):
+                _m.register_parameter(_w_name + "_orig", _w)
+            if not hasattr(_m, _w_name + "_logsigma2"):
+                _ls = Parameter(torch.full(_w.shape, _cfg.get("init_logsigma2", self.initial_logsigma2)))
+                _m.register_parameter(_w_name + "_logsigma2", _ls)
+            if not hasattr(_m, _w_name + "_mask"):
+                _m.register_buffer(_w_name + "_mask", torch.ones(*_w.shape, dtype=torch.bool))
 
             self._forward_pre_hooks.append(_m.register_forward_pre_hook(self.prehook))
             self._forward_hooks.append(_m.register_forward_hook(self.hook))
 
     def _base_prehook(self, module, _inputs):
-        _cfg = self._modules_dict[module]
+        _cfg = self.modules_dict[module]
         _w_name = _cfg.get("weight", "weight")
 
         # calculate masked weight
@@ -268,7 +252,7 @@ class VariationalDropoutLogsigma2(BaseVariationalDropout):
         c = -k1
 
         _res = 0.
-        for _m, _cfg in self._modules_dict.items():
+        for _m, _cfg in self.modules_dict.items():
             _w_orig = getattr(_m, _cfg.get("weight", "weight") + "_orig")
             _ls = getattr(_m, _cfg.get("weight", "weight") + "_logsigma2")
             _la = _ls - torch.log(torch.square(_w_orig) + 1.0e-8)
