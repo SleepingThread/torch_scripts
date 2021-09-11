@@ -91,3 +91,34 @@ class CallbacksList(object):
 
     def __getattr__(self, item):
         return functools.partial(self._callback_method_call, item)
+
+
+class LRSchedulerLinear(object):
+    def __init__(self, optimizer, max_lr=2.0e-3, min_lr=1.0e-3, n_epochs=100):
+        self.optimizer = optimizer
+
+        self.max_lr = max_lr
+        self.min_lr = min_lr
+        self.n_epochs = n_epochs
+
+    def on_epoch_begin(self, logs):
+        _e = logs.get("epoch_lr", logs["epoch"])
+        _lr = self.max_lr - self.min_lr * min(_e / 100., 1.0)
+        for _pg in self.optimizer.param_groups:
+            _pg["lr"] = _lr
+        logs["lr"] = _lr
+
+
+class LRSchedulerCosine(object):
+    def __init__(self, optimizer, max_lr=2.0e-3, n_epochs=200):
+        self.optimizer = optimizer
+
+        self.max_lr = max_lr
+        self.n_epochs = n_epochs
+
+    def on_epoch_begin(self, logs):
+        _e = logs.get("epoch_lr", logs["epoch"])
+        _lr = (1 + np.cos(_e * np.pi / self.n_epochs)) * 0.5 * self.max_lr if _e > 0 else self.max_lr
+        for _pg in self.optimizer.param_groups:
+            _pg["lr"] = _lr
+        logs["lr"] = _lr
