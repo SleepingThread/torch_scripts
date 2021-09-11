@@ -89,6 +89,8 @@ class Storage(object):
 
     def save(self, model, update=True):
         if not update or model.storage_id is None:
+            if model.storage_id is not None:
+                model.storage_id_history.append(model.storage_id)
             with self._storage_lock():
                 _id = self._get_id_nl()
         else:

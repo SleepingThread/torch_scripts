@@ -56,6 +56,7 @@ class Module(nn.Module):
         self.modifiers = Modifiers()
         self.logs_dir = None
         self.storage_id = None
+        self.storage_id_history = []
         self.info = dict()
 
     def initialize_logs_dir(self, root, prefix, suffix=None):
