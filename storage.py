@@ -88,6 +88,9 @@ class Storage(object):
         os.makedirs(os.path.join(self.path, "%d" % blk_id), exist_ok=True)
 
     def save(self, model, update=True):
+        if not hasattr(model, "storage_id_history"):
+            model.storage_id_history = []
+
         if not update or model.storage_id is None:
             if model.storage_id is not None:
                 model.storage_id_history.append(model.storage_id)

@@ -31,7 +31,7 @@ model.dropout_to(0.2)
 storage.save(model)
 model.initialize_logs_dir(os.path.join(os.path.dirname(os.environ["STORAGE"]), "experiments"), "%d" % model.storage_id)
 
-epochs = 200
+epochs = 200000
 
 train_transform = transforms.Compose([
     transforms.RandomCrop(32, padding=4),
