@@ -1,3 +1,8 @@
+# Good configurations:
+# 11: 93.12, crop+flip, Adam + l2(2e-5) + drop(0.2) + cosine lr
+# 9: 92.61, crop+flip, Adam + l2(1e-4) + drop(0.2) + cosine lr
+# 2: 93.18, crop+flip, SGD + l2(2.5e-4) + cosine lr
+
 import os
 import random
 
@@ -8,10 +13,9 @@ from torch.utils.data import DataLoader
 import torchvision
 from torchvision import transforms
 import torchmetrics
-# from torch_scripts.data.cifar10 import get_cifar10_zca
 from torch_scripts.models.vgg import VGG
 from torch_scripts.trainers import train_loop
-from torch_scripts.callbacks import TBLogsWriter
+from torch_scripts.callbacks import TBLogsWriter, LRSchedulerCosine
 from torch_scripts.utils import initialize_torch
 from torch_scripts.storage import Storage
 
@@ -22,23 +26,15 @@ initialize_torch(seed_value)
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
 model = VGG('VGG16')
+model.dropout_to(0.2)
 storage.save(model)
 model.initialize_logs_dir(os.path.join(os.path.dirname(os.environ["STORAGE"]), "experiments"), "%d" % model.storage_id)
 
 epochs = 200
-train_limit = test_limit = None
-
-# if os.environ.get("TEST_MODE", "FALSE").upper() == "TRUE":
-#     epochs = 200
-#     train_limit=30
-#     test_limit=10
-#
-#trainset, testset = get_CIFAR10_ZCA(os.path.join(os.environ["DATA"], "cifar10"), train_transform=train_transform,
-#                                    test_transform=test_transform, train_limit=train_limit, test_limit=test_limit)
 
 train_transform = transforms.Compose([
-    # transforms.RandomCrop(32, padding=4),
-    # transforms.RandomHorizontalFlip(),
+    transforms.RandomCrop(32, padding=4),
+    transforms.RandomHorizontalFlip(),
     transforms.ToTensor(),
     transforms.Normalize((0.5, 0.5, 0.5), (0.25, 0.25, 0.25)),
 ])
@@ -87,29 +83,18 @@ def loss_l2(output, target):
 model.info = {
     "model": "VGG16",
     "data": "cifar10",
-    "comment": "train, Adam + l2(2e-5), linear lr scheduler",
+    "comment": "train, Adam + l2(2e-5) + drop(0.2), cosine lr scheduler",
     "status": "running"
 }
 
 logs_writer = TBLogsWriter(model.logs_dir, writers_keys=list(loaders.keys()))
 logs_writer.add_info(model.info)
 
-
-class LRScheduler(object):
-    def __init__(self, optimizer):
-        self.optimizer = optimizer
-
-    def on_epoch_begin(self, logs):
-        _lr = 2.0e-5 - 1.0e-5 * min(logs["epoch"] / 100., 1.0)
-        for _pg in self.optimizer.param_groups:
-            _pg["lr"] = _lr
-        logs["lr"] = _lr
-
-
 logs = train_loop(model, loss_l2, loaders, opt, epochs, device=device, metrics=[loss_l2, ce_loss, top_1],
-                  callbacks=[LRScheduler(opt), logs_writer])
+                  callbacks=[LRSchedulerCosine(opt), logs_writer])
 
 model.info["status"] = "finished"
+model.info["quality"] = logs[-1]["test"]["top_1"]
 model.save("logs.pkl", logs)
 model.save()
 storage.save(model)
