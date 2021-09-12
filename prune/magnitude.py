@@ -42,7 +42,7 @@ class Pruner(Masker):
             w_to_prune = w_values > np.percentile(w_values, self.perc_to_prune)
             for _i in range(len(shifts) - 1):
                 _m = masks[_i]
-                _m[_m.clone()] = torch.from_numpy(w_to_prune[shifts[_i]:shifts[_i + 1]])
+                _m[_m.clone()] = torch.from_numpy(w_to_prune[shifts[_i]:shifts[_i + 1]]).to(_m.device)
 
     def on_train_begin(self):
         self._optimizer_state_dict = self.optimizer.state_dict()

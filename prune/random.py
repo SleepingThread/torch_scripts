@@ -19,4 +19,4 @@ class RandomPruner(Pruner):
             w_to_prune[_inds[:int(self.perc_to_prune * shifts[-1] / 100.)]] = False
             for _i in range(len(shifts) - 1):
                 _m = masks[_i]
-                _m[_m.clone()] = torch.from_numpy(w_to_prune[shifts[_i]:shifts[_i + 1]])
+                _m[_m.clone()] = torch.from_numpy(w_to_prune[shifts[_i]:shifts[_i + 1]]).to(_m.device)
