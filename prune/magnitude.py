@@ -26,6 +26,10 @@ class Pruner(Masker):
     def time_to_prune(self, epoch):
         return epoch % self.n_epochs_to_train == 0
 
+    def _save_model(self):
+        if self.storage is not None:
+            self.storage.save(self.model, update=False)
+
     def prune(self):
         weights = self.get_weights()
         masks = self.get_masks()
@@ -50,11 +54,16 @@ class Pruner(Masker):
                 return
 
             self._last_prune_epoch = epoch_logs["epoch"]
-            if self.storage is not None:
-                self.storage.save(self.model, update=False)
+            self._save_model()
             self.optimizer.load_state_dict(self._optimizer_state_dict)
             self.prune()
         epoch_logs["epoch_lr"] = epoch_logs["epoch"] - self._last_prune_epoch
+
+    def on_epoch_end(self, epoch_logs):
+        self.model.info["quality"] = epoch_logs["test"]["top_1"]
+
+    def on_train_end(self):
+        self._save_model()
 
     def on_epoch_end(self, epoch_logs):
         _nz = self.count_nonzero_weights()
