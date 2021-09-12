@@ -59,13 +59,11 @@ class Pruner(Masker):
             self.prune()
         epoch_logs["epoch_lr"] = epoch_logs["epoch"] - self._last_prune_epoch
 
-    def on_epoch_end(self, epoch_logs):
-        self.model.info["quality"] = epoch_logs["test"]["top_1"]
-
     def on_train_end(self):
         self._save_model()
 
     def on_epoch_end(self, epoch_logs):
+        self.model.info["quality"] = epoch_logs["test"]["top_1"]
         _nz = self.count_nonzero_weights()
         _all = self.count_weights()
         epoch_logs["nonzero_weights"] = _nz
