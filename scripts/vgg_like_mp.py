@@ -60,10 +60,8 @@ def seed_worker(worker_id):
 
 train_g = torch.Generator()
 train_g.manual_seed(seed_value)
-test_g = torch.Generator()
-test_g.manual_seed(seed_value)
 loaders = {"train": DataLoader(trainset, batch_size=100, generator=train_g, worker_init_fn=seed_worker),
-           "test": DataLoader(testset, batch_size=100, generator=test_g, worker_init_fn=seed_worker)}
+           "test": DataLoader(testset, batch_size=512, shuffle=False)}
 
 opt = torch.optim.Adam(model.parameters())
 
