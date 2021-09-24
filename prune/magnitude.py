@@ -63,8 +63,10 @@ class Pruner(Masker):
         self._save_model()
 
     def on_epoch_end(self, epoch_logs):
-        self.model.info["quality"] = epoch_logs["test"]["top_1"]
+        self.model.info["quality"] = epoch_logs.get("test", dict()).get("top_1", None)
         _nz = self.count_nonzero_weights()
         _all = self.count_weights()
+        self.model.info["nonzero_weights"] = _nz
+        self.model.info["total_weights"] = _all
         epoch_logs["nonzero_weights"] = _nz
         epoch_logs["nonzero_perc"] = _nz / _all
