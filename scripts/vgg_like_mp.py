@@ -29,7 +29,8 @@ device = "cuda:0" if torch.cuda.is_available() else "cpu"
 model = VGG('VGG16')
 model.dropout_to(0.2)
 storage.save(model)
-model.initialize_logs_dir(os.path.join(os.path.dirname(os.environ["STORAGE"]), "experiments"), "%d" % model.storage_id)
+model.initialize_logs_dir(os.path.join(os.path.dirname(os.environ["STORAGE"]), "experiments"),
+                          "%03d" % model.storage_id)
 
 epochs = 200000
 
