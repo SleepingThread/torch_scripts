@@ -118,7 +118,9 @@ class VariationalDropout(BaseVariationalDropout):
     def _hook_linear(self, module, inputs, outputs):
         _inp = inputs[0]
         _w = module.weight
-        _la = torch.clamp(module.weight_logalpha, min=self.logalpha_clip_values[0], max=self.logalpha_clip_values[1])
+        _la = module.weight_logalpha
+        with torch.no_grad():
+            _la.copy_(torch.clamp(_la, min=self.logalpha_clip_values[0], max=self.logalpha_clip_values[1]))
 
         _vd_add = torch.sqrt((_inp * _inp) @ (torch.exp(_la) * _w * _w).t() + 1.0e-14)
         _rand = torch.normal(0., self.normal_stddev, _vd_add.shape, device=_vd_add.device)
@@ -132,7 +134,9 @@ class VariationalDropout(BaseVariationalDropout):
     def _hook_conv2d(self, module, inputs, outputs):
         _inp = inputs[0]
         _w = module.weight
-        _la = torch.clamp(module.weight_logalpha, min=self.logalpha_clip_values[0], max=self.logalpha_clip_values[1])
+        _la = module.weight_logalpha
+        with torch.no_grad():
+            _la.copy_(torch.clamp(_la, min=self.logalpha_clip_values[0], max=self.logalpha_clip_values[1]))
 
         # convolve _inp*_inp with torch.exp(_la)*_w*_w, replace bias with None
         _inp = _inp * _inp
@@ -158,7 +162,8 @@ class VariationalDropout(BaseVariationalDropout):
         _res = 0.
         for _m, _cfg in self.modules_dict.items():
             _la = getattr(_m, _cfg.get("weight", "weight") + "_logalpha")
-            _la = torch.clamp(_la, min=self.logalpha_clip_values[0], max=self.logalpha_clip_values[1])
+            with torch.no_grad():
+                _la.copy_(torch.clamp(_la, min=self.logalpha_clip_values[0], max=self.logalpha_clip_values[1]))
             mdkl = k1 * torch.sigmoid(k2 + k3 * _la) - 0.5 * torch.log1p(torch.exp(-_la)) + c
             _res += -torch.sum(mdkl)
 
@@ -222,7 +227,8 @@ class VariationalDropoutLogsigma2(BaseVariationalDropout):
         _inp = inputs[0]
         _w = module.weight
         _la = module.weight_logsigma2 - torch.log(torch.square(module.weight_orig) + 1.0e-8)
-        _la = torch.clamp(_la, min=self.logalpha_clip_values[0], max=self.logalpha_clip_values[1])
+        with torch.no_grad():
+            _la.copy_(torch.clamp(_la, min=self.logalpha_clip_values[0], max=self.logalpha_clip_values[1]))
 
         _vd_add = torch.sqrt((_inp * _inp) @ (torch.exp(_la) * _w * _w).t() + 1.0e-14)
         _rand = torch.normal(0., self.normal_stddev, _vd_add.shape, device=_vd_add.device)
@@ -237,7 +243,8 @@ class VariationalDropoutLogsigma2(BaseVariationalDropout):
         _inp = inputs[0]
         _w = module.weight
         _la = module.weight_logsigma2 - torch.log(torch.square(module.weight_orig) + 1.0e-8)
-        _la = torch.clamp(_la, min=self.logalpha_clip_values[0], max=self.logalpha_clip_values[1])
+        with torch.no_grad():
+            _la.copy_(torch.clamp(_la, min=self.logalpha_clip_values[0], max=self.logalpha_clip_values[1]))
 
         # convolve _inp*_inp with torch.exp(_la)*_w*_w, replace bias with None
         _inp = _inp * _inp
@@ -265,7 +272,8 @@ class VariationalDropoutLogsigma2(BaseVariationalDropout):
             _w_orig = getattr(_m, _cfg.get("weight", "weight") + "_orig")
             _ls = getattr(_m, _cfg.get("weight", "weight") + "_logsigma2")
             _la = _ls - torch.log(torch.square(_w_orig) + 1.0e-8)
-            _la = torch.clamp(_la, min=self.logalpha_clip_values[0], max=self.logalpha_clip_values[1])
+            with torch.no_grad():
+                _la.copy_(torch.clamp(_la, min=self.logalpha_clip_values[0], max=self.logalpha_clip_values[1]))
             mdkl = k1 * torch.sigmoid(k2 + k3 * _la) - 0.5 * torch.log1p(torch.exp(-_la)) + c
             _res += -torch.sum(mdkl)
 
