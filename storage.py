@@ -109,7 +109,9 @@ class Storage(object):
 
     def load(self, blk_id):
         with self._block_lock(blk_id):
-            model = torch.load(os.path.join(self.path, "%d" % blk_id, "model.torch"))
+            map_location = None if torch.cuda.is_available() else torch.device("cpu")
+            model = torch.load(os.path.join(self.path, "%d" % blk_id, "model.torch"),
+                               map_location=map_location)
         return model
 
     @staticmethod
