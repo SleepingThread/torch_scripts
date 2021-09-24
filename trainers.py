@@ -116,12 +116,16 @@ def train_loop(model, loss_function, loaders, optimizer, epochs, start_epoch=0, 
     cl.on_train_begin()
 
     for _e in range(start_epoch, start_epoch + epochs):
-
         epoch_logs = dict(epoch=_e)
-        logs.append(epoch_logs)
 
         # on_epoch_begin
         cl.on_epoch_begin(epoch_logs)
+
+        if hasattr(model, "stop_training") and getattr(model, "stop_training"):
+            # drop epoch_logs
+            break
+
+        logs.append(epoch_logs)
 
         for _li, (_loader_name, _cur_loader) in enumerate(loaders.items()):
             wsa = WeightedSumAggregator()
