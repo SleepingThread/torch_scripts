@@ -35,6 +35,7 @@ model = model.to(device)
 storage.save(model)
 model.initialize_logs_dir(os.path.join(os.path.dirname(os.environ["STORAGE"]), "experiments"),
                           "%03d" % model.storage_id)
+print("Logs dir: ", model.logs_dir)
 
 epochs = 200
 
