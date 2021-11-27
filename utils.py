@@ -104,6 +104,10 @@ class Module(nn.Module):
             elif name.endswith(".pkl"):
                 with open(os.path.join(self.logs_dir, name), "wb") as f:
                     pickle.dump(obj, f)
+            elif name.endswith(".npy"):
+                if not isinstance(obj, np.ndarray):
+                    obj = np.array(obj, dtype=object)
+                np.save(os.path.join(self.logs_dir, name), obj)
             else:
                 ValueError("Unknown name extension: should be .torch or .pkl")
         else:
